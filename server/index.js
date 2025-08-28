@@ -16,6 +16,8 @@ import { fileURLToPath } from 'url'
 dotenv.config()
 
 const app = express()
+app.use(express.json()) 
+
 // app.use(cors())
 // CORS: locked to your Netlify site in production (fallback * for dev)
 const ALLOWED_ORIGIN = process.env.CORS_ALLOW_ORIGIN || '*'
@@ -68,6 +70,7 @@ const __dirname = path.dirname(__filename)
 const DATA_DIR = path.resolve(__dirname, './data')              // <-- 指向 server/../data
 const TOKENS_FILE = path.join(DATA_DIR, 'tokens.json')           // 簽發紀錄
 const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json')       // 會議事件（webhook）
+const FCM_TOKENS_FILE = path.join(DATA_DIR, 'fcm_tokens.json')
 
 ensureFiles()
 
@@ -75,6 +78,7 @@ function ensureFiles () {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true })
   if (!fs.existsSync(TOKENS_FILE)) fs.writeFileSync(TOKENS_FILE, JSON.stringify({ tokens: [] }, null, 2))
   if (!fs.existsSync(SESSIONS_FILE)) fs.writeFileSync(SESSIONS_FILE, JSON.stringify({ events: [] }, null, 2))
+  if (!fs.existsSync(FCM_TOKENS_FILE)) fs.writeFileSync(FCM_TOKENS_FILE, JSON.stringify({ events: [] }, null, 2))
 }
 
 const loadJSON = (p) => JSON.parse(fs.readFileSync(p, 'utf8') || '{}')
@@ -406,6 +410,26 @@ if (!APP_ID || !KID || !PRIVATE_KEY) {
 
 // 健康檢查
 app.get('/healthz', (_, res) => res.send('ok'))
+
+// ===== FCM token registration =====
+app.post('/api/fcm/register', (req, res) => {
+  try {
+    const token = req.body && req.body.token
+    if (!token) return res.status(400).json({ ok: false, error: 'missing token' })
+
+    let arr = []
+    try {
+      arr = JSON.parse(fs.readFileSync(FCM_TOKENS_FILE, 'utf-8'))
+    } catch (e) { arr = [] }
+
+    if (!arr.includes(token)) arr.push(token)
+    fs.writeFileSync(FCM_TOKENS_FILE, JSON.stringify(arr, null, 2))
+    res.json({ ok: true })
+  } catch (e) {
+    console.error('[FCM register] failed:', e)
+    res.status(500).json({ ok: false })
+  }
+})
 
 const server = http.createServer(app)
 
